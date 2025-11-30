@@ -7,6 +7,7 @@ import {
 import { MPFFund, Scenario } from '../../types';
 import { getFunds } from '../../services/dataService';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { createEnrollmentFormTemplate, createTransferFormTemplate } from './pdfHelpers';
 
 interface EnrollmentFormProps {
   prefillAllocation?: Scenario | null;
@@ -239,31 +240,10 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
     setGeneratedFiles([]);
     const newGeneratedFiles = [];
 
-    // 1. Generate Enrollment Form (Template 1_MASS-PAA-25V1.pdf)
+    // 1. Generate Enrollment Form using programmatic template
     try {
-        const enrollmentTemplateUrl = '1_MASS-PAA-25V1.pdf';
-        let pdfDoc;
-        let helveticaFont;
-
-        try {
-            const existingPdfBytes = await fetch(enrollmentTemplateUrl).then(res => {
-                if (!res.ok) throw new Error("Template not found");
-                return res.arrayBuffer();
-            });
-            pdfDoc = await PDFDocument.load(existingPdfBytes);
-        } catch (e) {
-            console.warn("Enrollment template not found, falling back to blank PDF.");
-            pdfDoc = await PDFDocument.create();
-            // Add dummy pages to match template structure (need at least 6 pages based on existing code)
-            for(let i=0; i<6; i++) pdfDoc.addPage([595, 842]);
-            
-            const page1 = pdfDoc.getPages()[0];
-            const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-            page1.drawText("Enrollment Form Template Missing", { x: 50, y: 800, size: 20, font });
-            page1.drawText("This is a generated placeholder containing your data.", { x: 50, y: 770, size: 12, font });
-        }
-        
-        helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        const pdfDoc = await createEnrollmentFormTemplate();
+        const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const pages = pdfDoc.getPages();
 
         // --- Page 2: Member Particulars ---
@@ -285,13 +265,13 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             if (formData.dobYear) page3.drawText(formData.dobYear, { x: 355, y: 752, size: 10, font: helveticaFont });
 
             // Gender
-            if (formData.gender === 'male') page3.drawText('X', { x: 780, y: 752, size: 12, font: helveticaFont });
-            if (formData.gender === 'female') page3.drawText('X', { x: 830, y: 752, size: 12, font: helveticaFont });
+            if (formData.gender === 'male') page3.drawText('X', { x: 453, y: 752, size: 12, font: helveticaFont }); // Adjusted for template
+            if (formData.gender === 'female') page3.drawText('X', { x: 523, y: 752, size: 12, font: helveticaFont }); // Adjusted for template
 
             // ID Number
             const idVal = formData.idType === 'hkid' ? formData.hkid : formData.passportNo;
-            if (formData.idType === 'hkid') page3.drawText('X', { x: 78, y: 725, size: 12, font: helveticaFont });
-            else page3.drawText('X', { x: 265, y: 725, size: 12, font: helveticaFont }); // Passport
+            if (formData.idType === 'hkid') page3.drawText('X', { x: 63, y: 725, size: 12, font: helveticaFont }); // Adjusted for template
+            else page3.drawText('X', { x: 243, y: 725, size: 12, font: helveticaFont }); // Adjusted for template
             
             // ID Digits (Simulated spread in boxes)
             let idX = 180;
@@ -319,9 +299,9 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             page3.drawText(formData.street, { x: 80, y: addrY - 70, size: 10, font: helveticaFont });
             
             // District/Region checkboxes
-            if (formData.region === 'hk') page3.drawText('X', { x: 303, y: 430, size: 12, font: helveticaFont });
-            if (formData.region === 'kln') page3.drawText('X', { x: 465, y: 430, size: 12, font: helveticaFont });
-            if (formData.region === 'nt') page3.drawText('X', { x: 628, y: 430, size: 12, font: helveticaFont });
+            if (formData.region === 'hk') page3.drawText('X', { x: 283, y: 430, size: 12, font: helveticaFont });
+            if (formData.region === 'kln') page3.drawText('X', { x: 375, y: 430, size: 12, font: helveticaFont });
+            if (formData.region === 'nt') page3.drawText('X', { x: 468, y: 430, size: 12, font: helveticaFont });
         }
 
         // --- Page 6: Investment Mandate ---
@@ -354,43 +334,21 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
         const pdfBytes = await pdfDoc.save();
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         newGeneratedFiles.push({
-            name: 'MPF_Enrollment_Form_Sample.pdf',
+            name: 'MPF_Enrollment_Form_Generated.pdf',
             url: URL.createObjectURL(blob)
         });
 
     } catch (error) {
         console.error("Error generating Enrollment PDF", error);
-        // No alert here, allow process to continue for other forms or show partial success
     }
 
-    // 2. Generate Transfer Form (Template 2_PM-25V5.pdf)
+    // 2. Generate Transfer Form using programmatic template
     const hasTransferData = Object.keys(formData.transferAllocations).length > 0 || formData.originalSchemeName;
     
     if (hasTransferData) {
          try {
-            const transferTemplateUrl = '2_PM-25V5.pdf';
-            let pdfDoc;
-            let helveticaFont;
-
-            try {
-                const existingPdfBytes = await fetch(transferTemplateUrl).then(res => {
-                    if (!res.ok) throw new Error("Template not found");
-                    return res.arrayBuffer();
-                });
-                pdfDoc = await PDFDocument.load(existingPdfBytes);
-            } catch (e) {
-                console.warn("Transfer template not found, falling back to blank PDF.");
-                pdfDoc = await PDFDocument.create();
-                // Add dummy pages (need at least 3 pages based on existing code)
-                for(let i=0; i<3; i++) pdfDoc.addPage([595, 842]);
-
-                const page1 = pdfDoc.getPages()[0];
-                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                page1.drawText("Transfer Form Template Missing", { x: 50, y: 800, size: 20, font });
-                page1.drawText("This is a generated placeholder containing your data.", { x: 50, y: 770, size: 12, font });
-            }
-
-            helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+            const pdfDoc = await createTransferFormTemplate();
+            const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const pages = pdfDoc.getPages();
 
             // --- Page 1: Scheme Member's Details ---
@@ -401,8 +359,8 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                 // Given Name (Eng)
                 page1.drawText(formData.givenNameEn, { x: 320, y: 285, size: 10, font: helveticaFont });
                 // ID Checkbox
-                if (formData.idType === 'hkid') page1.drawText('X', { x: 76, y: 205, size: 12, font: helveticaFont });
-                else page1.drawText('X', { x: 260, y: 205, size: 12, font: helveticaFont });
+                if (formData.idType === 'hkid') page1.drawText('X', { x: 63, y: 205, size: 12, font: helveticaFont });
+                else page1.drawText('X', { x: 243, y: 205, size: 12, font: helveticaFont });
                 
                 // ID Number
                 const idVal = formData.idType === 'hkid' ? formData.hkid : formData.passportNo;
@@ -433,7 +391,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                 page2.drawText(formData.originalSchemeName, { x: 220, y: 440, size: 10, font: helveticaFont });
                 
                 // Account Type (Personal Account usually)
-                page2.drawText('X', { x: 80, y: 410, size: 12, font: helveticaFont });
+                page2.drawText('X', { x: 183, y: 410, size: 12, font: helveticaFont }); // Adjusted
                 
                 // Member Account No
                 let accX = 220;
@@ -447,7 +405,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             if (pages.length > 2) {
                 const page3 = pages[2];
                 // Option (ii) To my designated account in the new scheme (Section C.1)
-                page3.drawText('X', { x: 80, y: 555, size: 12, font: helveticaFont }); 
+                page3.drawText('X', { x: 63, y: 555, size: 12, font: helveticaFont }); 
                 
                 // New Trustee Name
                 page3.drawText("YF Life Trustees Limited", { x: 220, y: 530, size: 10, font: helveticaFont });
@@ -458,7 +416,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             const pdfBytes = await pdfDoc.save();
             const blob = new Blob([pdfBytes], { type: 'application/pdf' });
             newGeneratedFiles.push({
-                name: 'MPF_Transfer_Form_Sample.pdf',
+                name: 'MPF_Transfer_Form_Generated.pdf',
                 url: URL.createObjectURL(blob)
             });
         } catch (error) {
@@ -486,7 +444,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                 <input 
                   type="number" 
                   min="0" max="100"
-                  className="w-12 p-1 text-right text-sm border rounded focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="w-12 p-1 text-right text-sm border rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-800 border-gray-300"
                   placeholder="0"
                   value={formData[`${type}Allocations`][fund.constituent_fund] || ''}
                   onChange={(e) => handleAllocationChange(type, fund.constituent_fund, e.target.value)}
@@ -502,6 +460,9 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
       </div>
     );
   };
+
+  // Common input class for Personal Info section to match dark style in screenshot
+  const darkInputClass = "w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-slate-700 text-white placeholder-gray-400 border-slate-600 focus:border-blue-500";
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-6 overflow-hidden animate-fade-in">
@@ -552,7 +513,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Surname (Eng) <span className="text-red-500">*</span></label>
                             <input 
                                 type="text" 
-                                className={`w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${errors.surnameEn ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-gray-300 dark:border-gray-600'} dark:bg-gray-700 dark:text-white`}
+                                className={`${darkInputClass} ${errors.surnameEn ? 'border-red-500 ring-1 ring-red-500' : ''}`}
                                 value={formData.surnameEn}
                                 onChange={(e) => handleChange('surnameEn', e.target.value.toUpperCase())}
                                 placeholder="CHAN"
@@ -563,7 +524,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Given Name (Eng) <span className="text-red-500">*</span></label>
                             <input 
                                 type="text" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                className={darkInputClass}
                                 value={formData.givenNameEn}
                                 onChange={(e) => handleChange('givenNameEn', e.target.value.toUpperCase())}
                                 placeholder="TAI MAN"
@@ -574,11 +535,11 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">ID Type</label>
-                            <div className="flex gap-4">
-                                <label className="flex items-center text-sm gap-2">
+                            <div className="flex gap-4 pt-2">
+                                <label className="flex items-center text-sm gap-2 text-gray-700">
                                     <input type="radio" checked={formData.idType === 'hkid'} onChange={() => handleChange('idType', 'hkid')} /> HKID
                                 </label>
-                                <label className="flex items-center text-sm gap-2">
+                                <label className="flex items-center text-sm gap-2 text-gray-700">
                                     <input type="radio" checked={formData.idType === 'passport'} onChange={() => handleChange('idType', 'passport')} /> Passport
                                 </label>
                             </div>
@@ -587,7 +548,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">{formData.idType === 'hkid' ? 'HKID Number' : 'Passport No'} <span className="text-red-500">*</span></label>
                             <input 
                                 type="text" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                className={darkInputClass}
                                 value={formData.idType === 'hkid' ? formData.hkid : formData.passportNo}
                                 onChange={(e) => handleChange(formData.idType === 'hkid' ? 'hkid' : 'passportNo', e.target.value.toUpperCase())}
                                 placeholder={formData.idType === 'hkid' ? "A123456(7)" : ""}
@@ -599,18 +560,18 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                          <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Date of Birth</label>
                             <div className="flex gap-2">
-                                <input type="text" placeholder="DD" className="w-16 p-2 text-sm border rounded-lg" value={formData.dobDay} onChange={e => handleChange('dobDay', e.target.value)} maxLength={2}/>
-                                <input type="text" placeholder="MM" className="w-16 p-2 text-sm border rounded-lg" value={formData.dobMonth} onChange={e => handleChange('dobMonth', e.target.value)} maxLength={2}/>
-                                <input type="text" placeholder="YYYY" className="w-24 p-2 text-sm border rounded-lg" value={formData.dobYear} onChange={e => handleChange('dobYear', e.target.value)} maxLength={4}/>
+                                <input type="text" placeholder="DD" className={`${darkInputClass} w-16`} value={formData.dobDay} onChange={e => handleChange('dobDay', e.target.value)} maxLength={2}/>
+                                <input type="text" placeholder="MM" className={`${darkInputClass} w-16`} value={formData.dobMonth} onChange={e => handleChange('dobMonth', e.target.value)} maxLength={2}/>
+                                <input type="text" placeholder="YYYY" className={`${darkInputClass} w-24`} value={formData.dobYear} onChange={e => handleChange('dobYear', e.target.value)} maxLength={4}/>
                             </div>
                          </div>
                          <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Gender</label>
-                             <div className="flex gap-4 mt-2">
-                                <label className="flex items-center text-sm gap-2">
+                             <div className="flex gap-4 pt-2">
+                                <label className="flex items-center text-sm gap-2 text-gray-700">
                                     <input type="radio" checked={formData.gender === 'male'} onChange={() => handleChange('gender', 'male')} /> Male
                                 </label>
-                                <label className="flex items-center text-sm gap-2">
+                                <label className="flex items-center text-sm gap-2 text-gray-700">
                                     <input type="radio" checked={formData.gender === 'female'} onChange={() => handleChange('gender', 'female')} /> Female
                                 </label>
                             </div>
@@ -621,10 +582,10 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Mobile Phone <span className="text-red-500">*</span></label>
                             <div className="flex gap-2">
-                                <input type="text" value="+852" disabled className="w-16 p-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-center dark:bg-gray-600 dark:text-gray-300 dark:border-gray-500" />
+                                <input type="text" value="+852" disabled className="w-16 p-2 text-sm border border-gray-600 rounded-lg bg-slate-600 text-gray-300 text-center" />
                                 <input 
                                     type="text" 
-                                    className="flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    className={darkInputClass}
                                     value={formData.phone}
                                     onChange={(e) => handleChange('phone', e.target.value.replace(/\D/g,''))}
                                     placeholder="12345678"
@@ -636,7 +597,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Email <span className="text-red-500">*</span></label>
                             <input 
                                 type="email" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                className={darkInputClass}
                                 value={formData.email}
                                 onChange={(e) => handleChange('email', e.target.value)}
                                 placeholder="email@example.com"
@@ -648,17 +609,17 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                     <div className="mt-4 pt-4 border-t border-gray-100">
                          <label className="block text-xs font-bold text-gray-800 mb-3">Residential Address</label>
                          <div className="grid grid-cols-3 gap-2 mb-2">
-                             <input type="text" placeholder="Flat/Room" className="p-2 text-sm border rounded-lg" value={formData.flatRoom} onChange={e => handleChange('flatRoom', e.target.value)}/>
-                             <input type="text" placeholder="Floor" className="p-2 text-sm border rounded-lg" value={formData.floor} onChange={e => handleChange('floor', e.target.value)}/>
-                             <input type="text" placeholder="Block" className="p-2 text-sm border rounded-lg" value={formData.block} onChange={e => handleChange('block', e.target.value)}/>
+                             <input type="text" placeholder="Flat/Room" className={darkInputClass} value={formData.flatRoom} onChange={e => handleChange('flatRoom', e.target.value)}/>
+                             <input type="text" placeholder="Floor" className={darkInputClass} value={formData.floor} onChange={e => handleChange('floor', e.target.value)}/>
+                             <input type="text" placeholder="Block" className={darkInputClass} value={formData.block} onChange={e => handleChange('block', e.target.value)}/>
                          </div>
                          <div className="grid grid-cols-1 gap-2 mb-2">
-                             <input type="text" placeholder="Building / Estate" className="w-full p-2 text-sm border rounded-lg" value={formData.building} onChange={e => handleChange('building', e.target.value)}/>
-                             <input type="text" placeholder="Street No. & Name" className="w-full p-2 text-sm border rounded-lg" value={formData.street} onChange={e => handleChange('street', e.target.value)}/>
+                             <input type="text" placeholder="Building / Estate" className={darkInputClass} value={formData.building} onChange={e => handleChange('building', e.target.value)}/>
+                             <input type="text" placeholder="Street No. & Name" className={darkInputClass} value={formData.street} onChange={e => handleChange('street', e.target.value)}/>
                          </div>
                          <div className="grid grid-cols-2 gap-2">
-                              <input type="text" placeholder="District" className="p-2 text-sm border rounded-lg" value={formData.district} onChange={e => handleChange('district', e.target.value)}/>
-                              <select className="p-2 text-sm border rounded-lg" value={formData.region} onChange={e => handleChange('region', e.target.value)}>
+                              <input type="text" placeholder="District" className={darkInputClass} value={formData.district} onChange={e => handleChange('district', e.target.value)}/>
+                              <select className={darkInputClass} value={formData.region} onChange={e => handleChange('region', e.target.value)}>
                                   <option value="">Select Region</option>
                                   <option value="hk">Hong Kong</option>
                                   <option value="kln">Kowloon</option>
@@ -740,7 +701,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Original Scheme Name</label>
                             <input 
                                 type="text" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800"
                                 value={formData.originalSchemeName}
                                 onChange={(e) => handleChange('originalSchemeName', e.target.value)}
                                 placeholder="e.g. Manulife Global Select"
@@ -750,7 +711,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Member Account No</label>
                             <input 
                                 type="text" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800"
                                 value={formData.originalMemberAccNo}
                                 onChange={(e) => handleChange('originalMemberAccNo', e.target.value)}
                             />
