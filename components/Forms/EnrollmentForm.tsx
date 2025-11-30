@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { MPFFund, Scenario } from '../../types';
 import { getFunds } from '../../services/dataService';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { fetchPdfBuffer, ENROLLMENT_FORM_URL, TRANSFER_FORM_URL } from './pdfHelpers';
 
 interface EnrollmentFormProps {
@@ -316,7 +316,6 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
     };
 
     downloadFile("1_Enrollment_Data.json", enrollmentJson);
-    // Small delay to ensure both downloads trigger
     setTimeout(() => {
         downloadFile("2_Transfer_Data.json", transferJson);
     }, 500);
@@ -334,20 +333,14 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
 
     const hasTransferData = Object.keys(formData.transferAllocations).length > 0 || formData.originalSchemeName;
 
-    // We will attempt to fetch from Google Drive URLs first.
-    // If fetch fails, we check for manual uploads.
-    // If manual uploads are missing, we trigger the popup.
-
     let enrollmentBuffer: ArrayBuffer | null = null;
     let transferBuffer: ArrayBuffer | null = null;
 
     try {
         // --- 1. Enrollment Form Source ---
         if (manualEnrollmentFile) {
-            // Priority: Manual file if user already uploaded it
             enrollmentBuffer = await manualEnrollmentFile.arrayBuffer();
         } else {
-            // Fallback: Try fetching from Google Drive
             try {
                 enrollmentBuffer = await fetchPdfBuffer(ENROLLMENT_FORM_URL);
             } catch (err) {
@@ -369,22 +362,21 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
         }
 
         // --- 3. Missing Template Check ---
-        // If we still don't have buffers, we must ask the user
         if (!enrollmentBuffer || (hasTransferData && !transferBuffer)) {
             setMissingTemplates(true);
             setIsGenerating(false);
             return;
         }
 
-        // Use string literal 'Helvetica' to avoid import issues with StandardFonts enum
-        const fontName = 'Helvetica';
+        // Use StandardFonts if available (safe fallback if StandardFonts is undefined in some builds)
+        const fontToEmbed = StandardFonts?.Helvetica ?? 'Helvetica';
 
         // --- 4. Process Enrollment Form ---
         const pdfDoc = await PDFDocument.load(enrollmentBuffer, { ignoreEncryption: true });
-        const helveticaFont = await pdfDoc.embedFont(fontName);
+        const helveticaFont = await pdfDoc.embedFont(fontToEmbed);
         
         if (!helveticaFont) {
-            throw new Error("Failed to embed Helvetica font. Please check the PDF document.");
+            throw new Error("Failed to embed Helvetica font. Please check PDF library configuration.");
         }
 
         const pages = pdfDoc.getPages();
@@ -392,20 +384,18 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
         // --- Page 2: Member Particulars ---
         if (pages.length > 1) {
             const page2 = pages[1];
-            
-            // Surname (Eng)
-            if (formData.surnameEn) page2.drawText(formData.surnameEn, { x: 130, y: 118, size: 10, font: helveticaFont });
-            // Given Name (Eng)
-            if (formData.givenNameEn) page2.drawText(formData.givenNameEn, { x: 350, y: 118, size: 10, font: helveticaFont });
+            // Safe drawing with fallbacks for undefined values
+            if (formData.surnameEn) page2.drawText(String(formData.surnameEn), { x: 130, y: 118, size: 10, font: helveticaFont });
+            if (formData.givenNameEn) page2.drawText(String(formData.givenNameEn), { x: 350, y: 118, size: 10, font: helveticaFont });
         }
 
         // --- Page 3: Personal Details & Address ---
         if (pages.length > 2) {
             const page3 = pages[2];
             // Date of Birth (DD MM YYYY)
-            if (formData.dobDay) page3.drawText(formData.dobDay, { x: 285, y: 752, size: 10, font: helveticaFont });
-            if (formData.dobMonth) page3.drawText(formData.dobMonth, { x: 320, y: 752, size: 10, font: helveticaFont });
-            if (formData.dobYear) page3.drawText(formData.dobYear, { x: 355, y: 752, size: 10, font: helveticaFont });
+            if (formData.dobDay) page3.drawText(String(formData.dobDay), { x: 285, y: 752, size: 10, font: helveticaFont });
+            if (formData.dobMonth) page3.drawText(String(formData.dobMonth), { x: 320, y: 752, size: 10, font: helveticaFont });
+            if (formData.dobYear) page3.drawText(String(formData.dobYear), { x: 355, y: 752, size: 10, font: helveticaFont });
 
             // Gender
             if (formData.gender === 'male') page3.drawText('X', { x: 453, y: 752, size: 12, font: helveticaFont });
@@ -416,34 +406,34 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             if (formData.idType === 'hkid') page3.drawText('X', { x: 63, y: 725, size: 12, font: helveticaFont });
             else page3.drawText('X', { x: 243, y: 725, size: 12, font: helveticaFont });
             
-            // ID Digits (Simulated spread in boxes)
+            // ID Digits
             if (idVal) {
                 let idX = 180;
-                for (const char of idVal) {
+                for (const char of String(idVal)) {
                     page3.drawText(char, { x: idX, y: 695, size: 11, font: helveticaFont });
-                    idX += 14.5; // approximate spacing for boxes
+                    idX += 14.5; 
                 }
             }
 
             // Phone
             if (formData.phone) {
                 let phoneX = 350;
-                for (const char of formData.phone) {
+                for (const char of String(formData.phone)) {
                     page3.drawText(char, { x: phoneX, y: 645, size: 11, font: helveticaFont });
                     phoneX += 14.5;
                 }
             }
 
             // Email
-            if (formData.email) page3.drawText(formData.email, { x: 80, y: 590, size: 10, font: helveticaFont });
+            if (formData.email) page3.drawText(String(formData.email), { x: 80, y: 590, size: 10, font: helveticaFont });
 
             // Address
             const addrY = 535;
-            if (formData.flatRoom) page3.drawText(formData.flatRoom, { x: 80, y: addrY, size: 10, font: helveticaFont });
-            if (formData.floor) page3.drawText(formData.floor, { x: 300, y: addrY, size: 10, font: helveticaFont });
-            if (formData.block) page3.drawText(formData.block, { x: 400, y: addrY, size: 10, font: helveticaFont });
-            if (formData.building) page3.drawText(formData.building, { x: 80, y: addrY - 35, size: 10, font: helveticaFont });
-            if (formData.street) page3.drawText(formData.street, { x: 80, y: addrY - 70, size: 10, font: helveticaFont });
+            if (formData.flatRoom) page3.drawText(String(formData.flatRoom), { x: 80, y: addrY, size: 10, font: helveticaFont });
+            if (formData.floor) page3.drawText(String(formData.floor), { x: 300, y: addrY, size: 10, font: helveticaFont });
+            if (formData.block) page3.drawText(String(formData.block), { x: 400, y: addrY, size: 10, font: helveticaFont });
+            if (formData.building) page3.drawText(String(formData.building), { x: 80, y: addrY - 35, size: 10, font: helveticaFont });
+            if (formData.street) page3.drawText(String(formData.street), { x: 80, y: addrY - 70, size: 10, font: helveticaFont });
             
             // District/Region checkboxes
             if (formData.region === 'hk') page3.drawText('X', { x: 283, y: 430, size: 12, font: helveticaFont });
@@ -454,11 +444,9 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
         // --- Page 6: Investment Mandate ---
         if (pages.length > 5) {
             const page6 = pages[5];
-            // Fill allocation percentages
             Object.entries(formData.enrollmentAllocations).forEach(([fundName, value]) => {
                 const allocation = value as number;
                 if (allocation > 0) {
-                    // Find mapped Y coordinate
                     let matchedY = 0;
                     for (const key in ENROLLMENT_FUND_COORDS) {
                         if (fundName.includes(key)) {
@@ -466,15 +454,11 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             break;
                         }
                     }
-                    
                     if (matchedY > 0) {
-                        // Mandatory Contribution Column X ≈ 380
                         page6.drawText(allocation.toString(), { x: 380, y: matchedY, size: 10, font: helveticaFont });
                     }
                 }
             });
-            
-            // Total (Mandatory) - approx Y=300
             page6.drawText('100', { x: 380, y: 300, size: 10, font: helveticaFont });
         }
 
@@ -488,7 +472,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
         // --- 5. Process Transfer Form ---
         if (hasTransferData && transferBuffer) {
             const pdfDocTransfer = await PDFDocument.load(transferBuffer, { ignoreEncryption: true });
-            const helveticaFontTransfer = await pdfDocTransfer.embedFont(fontName);
+            const helveticaFontTransfer = await pdfDocTransfer.embedFont(fontToEmbed);
             
             if (!helveticaFontTransfer) {
                 throw new Error("Failed to embed Helvetica font for Transfer form.");
@@ -499,51 +483,41 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             // --- Page 1: Scheme Member's Details ---
             if (pagesTransfer.length > 0) {
                 const page1 = pagesTransfer[0];
-                // Surname (Eng)
-                if (formData.surnameEn) page1.drawText(formData.surnameEn, { x: 120, y: 285, size: 10, font: helveticaFontTransfer });
-                // Given Name (Eng)
-                if (formData.givenNameEn) page1.drawText(formData.givenNameEn, { x: 320, y: 285, size: 10, font: helveticaFontTransfer });
-                // ID Checkbox
+                if (formData.surnameEn) page1.drawText(String(formData.surnameEn), { x: 120, y: 285, size: 10, font: helveticaFontTransfer });
+                if (formData.givenNameEn) page1.drawText(String(formData.givenNameEn), { x: 320, y: 285, size: 10, font: helveticaFontTransfer });
+                
                 if (formData.idType === 'hkid') page1.drawText('X', { x: 63, y: 205, size: 12, font: helveticaFontTransfer });
                 else page1.drawText('X', { x: 243, y: 205, size: 12, font: helveticaFontTransfer });
                 
-                // ID Number
                 const idVal = formData.idType === 'hkid' ? formData.hkid : formData.passportNo;
-                if (idVal) page1.drawText(idVal, { x: 260, y: 175, size: 11, font: helveticaFontTransfer });
+                if (idVal) page1.drawText(String(idVal), { x: 260, y: 175, size: 11, font: helveticaFontTransfer });
             }
 
             // --- Page 2: Transfer Information ---
             if (pagesTransfer.length > 1) {
                 const page2 = pagesTransfer[1];
-                // Phone (Section 3)
                 if (formData.phone) {
                     let phoneX = 360;
-                    for (const char of formData.phone) {
+                    for (const char of String(formData.phone)) {
                         page2.drawText(char, { x: phoneX, y: 750, size: 11, font: helveticaFontTransfer });
                         phoneX += 14.5;
                     }
                 }
                 
-                // Address (Section 4)
                 const addrY = 640;
-                if (formData.flatRoom) page2.drawText(formData.flatRoom, { x: 150, y: addrY, size: 10, font: helveticaFontTransfer });
-                if (formData.floor) page2.drawText(formData.floor, { x: 330, y: addrY, size: 10, font: helveticaFontTransfer });
-                if (formData.block) page2.drawText(formData.block, { x: 450, y: addrY, size: 10, font: helveticaFontTransfer });
-                if (formData.building) page2.drawText(formData.building, { x: 150, y: addrY - 35, size: 10, font: helveticaFontTransfer });
-                if (formData.street) page2.drawText(formData.street, { x: 150, y: addrY - 70, size: 10, font: helveticaFontTransfer });
-                if (formData.district) page2.drawText(formData.district, { x: 150, y: addrY - 105, size: 10, font: helveticaFontTransfer });
+                if (formData.flatRoom) page2.drawText(String(formData.flatRoom), { x: 150, y: addrY, size: 10, font: helveticaFontTransfer });
+                if (formData.floor) page2.drawText(String(formData.floor), { x: 330, y: addrY, size: 10, font: helveticaFontTransfer });
+                if (formData.block) page2.drawText(String(formData.block), { x: 450, y: addrY, size: 10, font: helveticaFontTransfer });
+                if (formData.building) page2.drawText(String(formData.building), { x: 150, y: addrY - 35, size: 10, font: helveticaFontTransfer });
+                if (formData.street) page2.drawText(String(formData.street), { x: 150, y: addrY - 70, size: 10, font: helveticaFontTransfer });
+                if (formData.district) page2.drawText(String(formData.district), { x: 150, y: addrY - 105, size: 10, font: helveticaFontTransfer });
 
-                // Original Trustee & Scheme (Section B.1)
-                // Original Scheme Name
-                if (formData.originalSchemeName) page2.drawText(formData.originalSchemeName, { x: 220, y: 440, size: 10, font: helveticaFontTransfer });
-                
-                // Account Type (Personal Account usually)
+                if (formData.originalSchemeName) page2.drawText(String(formData.originalSchemeName), { x: 220, y: 440, size: 10, font: helveticaFontTransfer });
                 page2.drawText('X', { x: 183, y: 410, size: 12, font: helveticaFontTransfer }); 
                 
-                // Member Account No
                 if (formData.originalMemberAccNo) {
                     let accX = 220;
-                    for (const char of formData.originalMemberAccNo) {
+                    for (const char of String(formData.originalMemberAccNo)) {
                         page2.drawText(char, { x: accX, y: 385, size: 11, font: helveticaFontTransfer });
                         accX += 14.5;
                     }
@@ -553,12 +527,8 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             // --- Page 3: Transfer Options ---
             if (pagesTransfer.length > 2) {
                 const page3 = pagesTransfer[2];
-                // Option (ii) To my designated account in the new scheme (Section C.1)
                 page3.drawText('X', { x: 63, y: 555, size: 12, font: helveticaFontTransfer }); 
-                
-                // New Trustee Name
                 page3.drawText("YF Life Trustees Limited", { x: 220, y: 530, size: 10, font: helveticaFontTransfer });
-                // New Scheme Name
                 page3.drawText("MASS Mandatory Provident Fund Scheme", { x: 220, y: 500, size: 10, font: helveticaFontTransfer });
             }
             
@@ -616,7 +586,6 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
     );
   };
 
-  // Common input class for Personal Info section to match dark style in screenshot
   const darkInputClass = "w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-slate-700 text-white placeholder-gray-400 border-slate-600 focus:border-blue-500";
 
   return (
