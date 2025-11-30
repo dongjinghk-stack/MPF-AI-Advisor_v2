@@ -1,13 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  ChevronDown, ChevronUp, AlertCircle, CheckCircle, Download, 
-  Info, FileText, User, Briefcase, RefreshCw, Loader2 
+  ChevronDown, ChevronUp, CheckCircle, Download, 
+  Info, FileText, User, Briefcase, RefreshCw, Loader2, UploadCloud, FolderUp, FileJson
 } from 'lucide-react';
 import { MPFFund, Scenario } from '../../types';
 import { getFunds } from '../../services/dataService';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import { createEnrollmentFormTemplate, createTransferFormTemplate } from './pdfHelpers';
+import { PDFDocument } from 'pdf-lib';
 
 interface EnrollmentFormProps {
   prefillAllocation?: Scenario | null;
@@ -97,8 +96,12 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
   // New state for PDF generation
   const [generatedFiles, setGeneratedFiles] = useState<{name: string, url: string}[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  
   const [activeModal, setActiveModal] = useState<string | null>(null);
+
+  // Fallback states
+  const [missingTemplates, setMissingTemplates] = useState<boolean>(false);
+  const [manualEnrollmentFile, setManualEnrollmentFile] = useState<File | null>(null);
+  const [manualTransferFile, setManualTransferFile] = useState<File | null>(null);
 
   // Initialize Available Funds, ensuring Scenario funds are present
   useEffect(() => {
@@ -230,6 +233,94 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
     return Object.keys(newErrors).length === 0;
   };
 
+  const downloadJSONData = () => {
+    if (!validateForm()) {
+      alert("Please fix validation errors in the Personal Info section.");
+      return;
+    }
+
+    // Prepare Enrollment JSON
+    const enrollmentJson = {
+      form: "MASS-PAA-25V1",
+      personal_particulars: {
+        surname_eng: formData.surnameEn,
+        given_name_eng: formData.givenNameEn,
+        chinese_name: formData.chineseName,
+        id_type: formData.idType,
+        id_no: formData.idType === 'hkid' ? formData.hkid : formData.passportNo,
+        date_of_birth: `${formData.dobYear}-${formData.dobMonth}-${formData.dobDay}`,
+        gender: formData.gender,
+        mobile: formData.phone,
+        email: formData.email,
+        address: {
+            flat: formData.flatRoom,
+            floor: formData.floor,
+            block: formData.block,
+            building: formData.building,
+            street: formData.street,
+            district: formData.district,
+            region: formData.region
+        }
+      },
+      investment_mandate: {
+          allocations: formData.enrollmentAllocations
+      },
+      declarations: {
+          accepted_pia: formData.acceptPIA,
+          accepted_pics: formData.acceptPersonalInfo
+      }
+    };
+
+    // Prepare Transfer JSON
+    const transferJson = {
+      form: "PM-25V5",
+      scheme_member_details: {
+          surname: formData.surnameEn,
+          given_name: formData.givenNameEn,
+          id_no: formData.idType === 'hkid' ? formData.hkid : formData.passportNo,
+          contact_no: formData.phone,
+          address: {
+            flat: formData.flatRoom,
+            floor: formData.floor,
+            block: formData.block,
+            building: formData.building,
+            street: formData.street,
+            district: formData.district
+          }
+      },
+      original_scheme_info: {
+          scheme_name: formData.originalSchemeName,
+          member_account_no: formData.originalMemberAccNo
+      },
+      new_scheme_info: {
+          trustee: "YF Life Trustees Limited",
+          scheme: "MASS Mandatory Provident Fund Scheme",
+          transfer_to: "Designated Account"
+      },
+      fund_allocations: formData.transferAllocations
+    };
+
+    // Download Helper
+    const downloadFile = (name: string, data: any) => {
+        const jsonString = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
+    downloadFile("1_Enrollment_Data.json", enrollmentJson);
+    // Small delay to ensure both downloads trigger
+    setTimeout(() => {
+        downloadFile("2_Transfer_Data.json", transferJson);
+    }, 500);
+  };
+
   const generatePDFs = async () => {
     if (!validateForm()) {
       alert("Please fix validation errors in the Personal Info section.");
@@ -240,10 +331,28 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
     setGeneratedFiles([]);
     const newGeneratedFiles = [];
 
-    // 1. Generate Enrollment Form using programmatic template
+    const hasTransferData = Object.keys(formData.transferAllocations).length > 0 || formData.originalSchemeName;
+
+    // Check if required files are uploaded
+    if (!manualEnrollmentFile || (hasTransferData && !manualTransferFile)) {
+        setMissingTemplates(true);
+        setIsGenerating(false);
+        return;
+    }
+
     try {
-        const pdfDoc = await createEnrollmentFormTemplate();
-        const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        // Use string literal 'Helvetica' to avoid import issues with StandardFonts enum
+        const fontName = 'Helvetica';
+
+        // --- 1. Enrollment Form ---
+        const enrollmentBuffer = await manualEnrollmentFile.arrayBuffer();
+        const pdfDoc = await PDFDocument.load(enrollmentBuffer, { ignoreEncryption: true });
+        const helveticaFont = await pdfDoc.embedFont(fontName);
+        
+        if (!helveticaFont) {
+            throw new Error("Failed to embed Helvetica font. Please check the PDF document.");
+        }
+
         const pages = pdfDoc.getPages();
 
         // --- Page 2: Member Particulars ---
@@ -251,9 +360,9 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             const page2 = pages[1];
             
             // Surname (Eng)
-            page2.drawText(formData.surnameEn, { x: 130, y: 118, size: 10, font: helveticaFont });
+            if (formData.surnameEn) page2.drawText(formData.surnameEn, { x: 130, y: 118, size: 10, font: helveticaFont });
             // Given Name (Eng)
-            page2.drawText(formData.givenNameEn, { x: 350, y: 118, size: 10, font: helveticaFont });
+            if (formData.givenNameEn) page2.drawText(formData.givenNameEn, { x: 350, y: 118, size: 10, font: helveticaFont });
         }
 
         // --- Page 3: Personal Details & Address ---
@@ -274,29 +383,33 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             else page3.drawText('X', { x: 243, y: 725, size: 12, font: helveticaFont });
             
             // ID Digits (Simulated spread in boxes)
-            let idX = 180;
-            for (const char of idVal) {
-                page3.drawText(char, { x: idX, y: 695, size: 11, font: helveticaFont });
-                idX += 14.5; // approximate spacing for boxes
+            if (idVal) {
+                let idX = 180;
+                for (const char of idVal) {
+                    page3.drawText(char, { x: idX, y: 695, size: 11, font: helveticaFont });
+                    idX += 14.5; // approximate spacing for boxes
+                }
             }
 
             // Phone
-            let phoneX = 350;
-             for (const char of formData.phone) {
-                page3.drawText(char, { x: phoneX, y: 645, size: 11, font: helveticaFont });
-                phoneX += 14.5;
+            if (formData.phone) {
+                let phoneX = 350;
+                for (const char of formData.phone) {
+                    page3.drawText(char, { x: phoneX, y: 645, size: 11, font: helveticaFont });
+                    phoneX += 14.5;
+                }
             }
 
             // Email
-            page3.drawText(formData.email, { x: 80, y: 590, size: 10, font: helveticaFont });
+            if (formData.email) page3.drawText(formData.email, { x: 80, y: 590, size: 10, font: helveticaFont });
 
             // Address
             const addrY = 535;
-            page3.drawText(formData.flatRoom, { x: 80, y: addrY, size: 10, font: helveticaFont });
-            page3.drawText(formData.floor, { x: 300, y: addrY, size: 10, font: helveticaFont });
-            page3.drawText(formData.block, { x: 400, y: addrY, size: 10, font: helveticaFont });
-            page3.drawText(formData.building, { x: 80, y: addrY - 35, size: 10, font: helveticaFont });
-            page3.drawText(formData.street, { x: 80, y: addrY - 70, size: 10, font: helveticaFont });
+            if (formData.flatRoom) page3.drawText(formData.flatRoom, { x: 80, y: addrY, size: 10, font: helveticaFont });
+            if (formData.floor) page3.drawText(formData.floor, { x: 300, y: addrY, size: 10, font: helveticaFont });
+            if (formData.block) page3.drawText(formData.block, { x: 400, y: addrY, size: 10, font: helveticaFont });
+            if (formData.building) page3.drawText(formData.building, { x: 80, y: addrY - 35, size: 10, font: helveticaFont });
+            if (formData.street) page3.drawText(formData.street, { x: 80, y: addrY - 70, size: 10, font: helveticaFont });
             
             // District/Region checkboxes
             if (formData.region === 'hk') page3.drawText('X', { x: 283, y: 430, size: 12, font: helveticaFont });
@@ -334,94 +447,103 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
         const pdfBytes = await pdfDoc.save();
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         newGeneratedFiles.push({
-            name: 'MPF_Enrollment_Form_Generated.pdf',
+            name: 'MPF_Enrollment_Form_Filled.pdf',
             url: URL.createObjectURL(blob)
         });
 
-    } catch (error) {
-        console.error("Error generating Enrollment PDF", error);
-    }
+        // --- 2. Transfer Form ---
+        if (hasTransferData && manualTransferFile) {
+            const transferBuffer = await manualTransferFile.arrayBuffer();
+            const pdfDocTransfer = await PDFDocument.load(transferBuffer, { ignoreEncryption: true });
+            const helveticaFontTransfer = await pdfDocTransfer.embedFont(fontName);
+            
+            if (!helveticaFontTransfer) {
+                throw new Error("Failed to embed Helvetica font for Transfer form.");
+            }
 
-    // 2. Generate Transfer Form using programmatic template
-    const hasTransferData = Object.keys(formData.transferAllocations).length > 0 || formData.originalSchemeName;
-    
-    if (hasTransferData) {
-         try {
-            const pdfDoc = await createTransferFormTemplate();
-            const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-            const pages = pdfDoc.getPages();
+            const pagesTransfer = pdfDocTransfer.getPages();
 
             // --- Page 1: Scheme Member's Details ---
-            if (pages.length > 0) {
-                const page1 = pages[0];
+            if (pagesTransfer.length > 0) {
+                const page1 = pagesTransfer[0];
                 // Surname (Eng)
-                page1.drawText(formData.surnameEn, { x: 120, y: 285, size: 10, font: helveticaFont });
+                if (formData.surnameEn) page1.drawText(formData.surnameEn, { x: 120, y: 285, size: 10, font: helveticaFontTransfer });
                 // Given Name (Eng)
-                page1.drawText(formData.givenNameEn, { x: 320, y: 285, size: 10, font: helveticaFont });
+                if (formData.givenNameEn) page1.drawText(formData.givenNameEn, { x: 320, y: 285, size: 10, font: helveticaFontTransfer });
                 // ID Checkbox
-                if (formData.idType === 'hkid') page1.drawText('X', { x: 63, y: 205, size: 12, font: helveticaFont });
-                else page1.drawText('X', { x: 243, y: 205, size: 12, font: helveticaFont });
+                if (formData.idType === 'hkid') page1.drawText('X', { x: 63, y: 205, size: 12, font: helveticaFontTransfer });
+                else page1.drawText('X', { x: 243, y: 205, size: 12, font: helveticaFontTransfer });
                 
                 // ID Number
                 const idVal = formData.idType === 'hkid' ? formData.hkid : formData.passportNo;
-                page1.drawText(idVal, { x: 260, y: 175, size: 11, font: helveticaFont });
+                if (idVal) page1.drawText(idVal, { x: 260, y: 175, size: 11, font: helveticaFontTransfer });
             }
 
             // --- Page 2: Transfer Information ---
-            if (pages.length > 1) {
-                const page2 = pages[1];
+            if (pagesTransfer.length > 1) {
+                const page2 = pagesTransfer[1];
                 // Phone (Section 3)
-                let phoneX = 360;
-                for (const char of formData.phone) {
-                    page2.drawText(char, { x: phoneX, y: 750, size: 11, font: helveticaFont });
-                    phoneX += 14.5;
+                if (formData.phone) {
+                    let phoneX = 360;
+                    for (const char of formData.phone) {
+                        page2.drawText(char, { x: phoneX, y: 750, size: 11, font: helveticaFontTransfer });
+                        phoneX += 14.5;
+                    }
                 }
                 
                 // Address (Section 4)
                 const addrY = 640;
-                page2.drawText(formData.flatRoom, { x: 150, y: addrY, size: 10, font: helveticaFont });
-                page2.drawText(formData.floor, { x: 330, y: addrY, size: 10, font: helveticaFont });
-                page2.drawText(formData.block, { x: 450, y: addrY, size: 10, font: helveticaFont });
-                page2.drawText(formData.building, { x: 150, y: addrY - 35, size: 10, font: helveticaFont });
-                page2.drawText(formData.street, { x: 150, y: addrY - 70, size: 10, font: helveticaFont });
-                page2.drawText(formData.district, { x: 150, y: addrY - 105, size: 10, font: helveticaFont });
+                if (formData.flatRoom) page2.drawText(formData.flatRoom, { x: 150, y: addrY, size: 10, font: helveticaFontTransfer });
+                if (formData.floor) page2.drawText(formData.floor, { x: 330, y: addrY, size: 10, font: helveticaFontTransfer });
+                if (formData.block) page2.drawText(formData.block, { x: 450, y: addrY, size: 10, font: helveticaFontTransfer });
+                if (formData.building) page2.drawText(formData.building, { x: 150, y: addrY - 35, size: 10, font: helveticaFontTransfer });
+                if (formData.street) page2.drawText(formData.street, { x: 150, y: addrY - 70, size: 10, font: helveticaFontTransfer });
+                if (formData.district) page2.drawText(formData.district, { x: 150, y: addrY - 105, size: 10, font: helveticaFontTransfer });
 
                 // Original Trustee & Scheme (Section B.1)
                 // Original Scheme Name
-                page2.drawText(formData.originalSchemeName, { x: 220, y: 440, size: 10, font: helveticaFont });
+                if (formData.originalSchemeName) page2.drawText(formData.originalSchemeName, { x: 220, y: 440, size: 10, font: helveticaFontTransfer });
                 
                 // Account Type (Personal Account usually)
-                page2.drawText('X', { x: 183, y: 410, size: 12, font: helveticaFont }); 
+                page2.drawText('X', { x: 183, y: 410, size: 12, font: helveticaFontTransfer }); 
                 
                 // Member Account No
-                let accX = 220;
-                for (const char of formData.originalMemberAccNo) {
-                    page2.drawText(char, { x: accX, y: 385, size: 11, font: helveticaFont });
-                    accX += 14.5;
+                if (formData.originalMemberAccNo) {
+                    let accX = 220;
+                    for (const char of formData.originalMemberAccNo) {
+                        page2.drawText(char, { x: accX, y: 385, size: 11, font: helveticaFontTransfer });
+                        accX += 14.5;
+                    }
                 }
             }
             
             // --- Page 3: Transfer Options ---
-            if (pages.length > 2) {
-                const page3 = pages[2];
+            if (pagesTransfer.length > 2) {
+                const page3 = pagesTransfer[2];
                 // Option (ii) To my designated account in the new scheme (Section C.1)
-                page3.drawText('X', { x: 63, y: 555, size: 12, font: helveticaFont }); 
+                page3.drawText('X', { x: 63, y: 555, size: 12, font: helveticaFontTransfer }); 
                 
                 // New Trustee Name
-                page3.drawText("YF Life Trustees Limited", { x: 220, y: 530, size: 10, font: helveticaFont });
+                page3.drawText("YF Life Trustees Limited", { x: 220, y: 530, size: 10, font: helveticaFontTransfer });
                 // New Scheme Name
-                page3.drawText("MASS Mandatory Provident Fund Scheme", { x: 220, y: 500, size: 10, font: helveticaFont });
+                page3.drawText("MASS Mandatory Provident Fund Scheme", { x: 220, y: 500, size: 10, font: helveticaFontTransfer });
             }
             
-            const pdfBytes = await pdfDoc.save();
-            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const pdfBytesTransfer = await pdfDocTransfer.save();
+            const blobTransfer = new Blob([pdfBytesTransfer], { type: 'application/pdf' });
             newGeneratedFiles.push({
-                name: 'MPF_Transfer_Form_Generated.pdf',
-                url: URL.createObjectURL(blob)
+                name: 'MPF_Transfer_Form_Filled.pdf',
+                url: URL.createObjectURL(blobTransfer)
             });
-        } catch (error) {
-            console.error("Error generating Transfer PDF", error);
         }
+
+    } catch (error) {
+        console.error("Error generating PDF", error);
+        let msg = error instanceof Error ? error.message : 'Unknown error';
+        if (msg.includes('instance of t') || msg.includes('instance of undefined')) {
+            msg = "Internal PDF font error. Please try reloading the page.";
+        }
+        alert(`Error generating PDF: ${msg}`);
     }
 
     setGeneratedFiles(newGeneratedFiles);
@@ -734,14 +856,24 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
 
         {/* Submit Actions */}
         <div className="mt-6 flex flex-col items-center gap-4">
-            <button 
-                onClick={generatePDFs}
-                disabled={isGenerating}
-                className="w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl shadow-lg shadow-blue-200 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
-            >
-                {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
-                Generate Form Data
-            </button>
+            <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
+                <button 
+                    onClick={generatePDFs}
+                    disabled={isGenerating}
+                    className="flex-1 md:flex-none px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl shadow-lg shadow-blue-200 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+                >
+                    {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+                    Generate Form Data
+                </button>
+                
+                <button 
+                    onClick={downloadJSONData}
+                    className="flex-1 md:flex-none px-8 py-3 bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-bold rounded-xl shadow-md transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+                >
+                    <FileJson size={18} />
+                    Download JSON
+                </button>
+            </div>
 
             {generatedFiles.length > 0 && (
                 <div className="w-full bg-green-50 border border-green-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 animate-scale-in">
@@ -771,6 +903,70 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             )}
         </div>
       </div>
+
+      {/* Manual Upload Modal for Missing Templates */}
+      {missingTemplates && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setMissingTemplates(false)}>
+            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-3 mb-4 text-blue-600">
+                    <FolderUp size={28} />
+                    <h3 className="text-xl font-bold text-gray-900">Upload PDF Templates</h3>
+                </div>
+                
+                <p className="text-sm text-gray-600 mb-6">
+                    Please upload the required PDF template files to proceed with form generation.
+                </p>
+
+                <div className="space-y-4 mb-6">
+                    {/* Enrollment File Input */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Upload "1_MASS-PAA-25V1.pdf" (Enrollment)</label>
+                        <div className="flex items-center gap-2">
+                            <label className="flex-1 flex flex-col items-center justify-center px-4 py-3 bg-white border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                                <UploadCloud className={`w-6 h-6 mb-1 ${manualEnrollmentFile ? 'text-green-500' : 'text-gray-400'}`} />
+                                <span className="text-xs text-gray-500 truncate w-full text-center">
+                                    {manualEnrollmentFile ? manualEnrollmentFile.name : 'Click to Select File'}
+                                </span>
+                                <input type="file" accept=".pdf" className="hidden" onChange={(e) => setManualEnrollmentFile(e.target.files?.[0] || null)} />
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Transfer File Input */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Upload "2_PM-25V5.pdf" (Transfer)</label>
+                        <div className="flex items-center gap-2">
+                            <label className="flex-1 flex flex-col items-center justify-center px-4 py-3 bg-white border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                                <UploadCloud className={`w-6 h-6 mb-1 ${manualTransferFile ? 'text-green-500' : 'text-gray-400'}`} />
+                                <span className="text-xs text-gray-500 truncate w-full text-center">
+                                    {manualTransferFile ? manualTransferFile.name : 'Click to Select File'}
+                                </span>
+                                <input type="file" accept=".pdf" className="hidden" onChange={(e) => setManualTransferFile(e.target.files?.[0] || null)} />
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                    <button 
+                        onClick={() => setMissingTemplates(false)} 
+                        className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        onClick={() => {
+                            setMissingTemplates(false);
+                            generatePDFs(); // Retry with manual files
+                        }}
+                        className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-md transition-colors"
+                    >
+                        Generate Forms
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* Info Modal Overlay */}
       {activeModal && (
