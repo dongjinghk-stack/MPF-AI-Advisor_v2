@@ -265,13 +265,13 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             if (formData.dobYear) page3.drawText(formData.dobYear, { x: 355, y: 752, size: 10, font: helveticaFont });
 
             // Gender
-            if (formData.gender === 'male') page3.drawText('X', { x: 453, y: 752, size: 12, font: helveticaFont }); // Adjusted for template
-            if (formData.gender === 'female') page3.drawText('X', { x: 523, y: 752, size: 12, font: helveticaFont }); // Adjusted for template
+            if (formData.gender === 'male') page3.drawText('X', { x: 453, y: 752, size: 12, font: helveticaFont });
+            if (formData.gender === 'female') page3.drawText('X', { x: 523, y: 752, size: 12, font: helveticaFont });
 
             // ID Number
             const idVal = formData.idType === 'hkid' ? formData.hkid : formData.passportNo;
-            if (formData.idType === 'hkid') page3.drawText('X', { x: 63, y: 725, size: 12, font: helveticaFont }); // Adjusted for template
-            else page3.drawText('X', { x: 243, y: 725, size: 12, font: helveticaFont }); // Adjusted for template
+            if (formData.idType === 'hkid') page3.drawText('X', { x: 63, y: 725, size: 12, font: helveticaFont });
+            else page3.drawText('X', { x: 243, y: 725, size: 12, font: helveticaFont });
             
             // ID Digits (Simulated spread in boxes)
             let idX = 180;
@@ -391,7 +391,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                 page2.drawText(formData.originalSchemeName, { x: 220, y: 440, size: 10, font: helveticaFont });
                 
                 // Account Type (Personal Account usually)
-                page2.drawText('X', { x: 183, y: 410, size: 12, font: helveticaFont }); // Adjusted
+                page2.drawText('X', { x: 183, y: 410, size: 12, font: helveticaFont }); 
                 
                 // Member Account No
                 let accX = 220;
@@ -701,7 +701,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Original Scheme Name</label>
                             <input 
                                 type="text" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800"
+                                className={darkInputClass}
                                 value={formData.originalSchemeName}
                                 onChange={(e) => handleChange('originalSchemeName', e.target.value)}
                                 placeholder="e.g. Manulife Global Select"
@@ -711,7 +711,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Member Account No</label>
                             <input 
                                 type="text" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800"
+                                className={darkInputClass}
                                 value={formData.originalMemberAccNo}
                                 onChange={(e) => handleChange('originalMemberAccNo', e.target.value)}
                             />

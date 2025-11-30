@@ -70,8 +70,8 @@ export const createEnrollmentFormTemplate = async (): Promise<PDFDocument> => {
             drawField(page, font, "YYYY", 350, 748, 50, 18);
 
             // Gender (y=752)
-            page.drawText("(5) Gender", { x: 700, y: 770, size: 10, font: fontBold }); // Off page? Re-adjust x
-            page.drawText("Male [ ]", { x: 450, y: 752, size: 10, font }); // Adjusted x to fit A4
+            page.drawText("(5) Gender", { x: 400, y: 770, size: 10, font: fontBold });
+            page.drawText("Male [ ]", { x: 450, y: 752, size: 10, font });
             page.drawText("Female [ ]", { x: 520, y: 752, size: 10, font });
 
             // ID (y=725 filling)
