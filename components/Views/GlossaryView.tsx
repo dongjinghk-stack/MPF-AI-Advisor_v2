@@ -1,60 +1,9 @@
-import React, { useState } from 'react';
-import { Image as ImageIcon, Building2, Briefcase, HardHat, ArrowRight, Plus, Equal, Sparkles, Loader2, RefreshCw } from 'lucide-react';
-import { generateGlossaryImage } from '../../services/moonshotService';
+import React from 'react';
+import { Image as ImageIcon, Building2, Briefcase, HardHat, ArrowRight, Plus, Equal } from 'lucide-react';
 
 const GlossaryView: React.FC = () => {
-  const [glossaryImage, setGlossaryImage] = useState<string>("https://i.imgur.com/Gz0vU6A.png");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleGenerateImage = async () => {
-    setIsGenerating(true);
-    setError(null);
-
-    const performGeneration = async (isRetry = false) => {
-        try {
-            // Ensure API Key is selected
-            // @ts-ignore
-            if (typeof window !== 'undefined' && window.aistudio) {
-                // @ts-ignore
-                const hasKey = await window.aistudio.hasSelectedApiKey();
-                if (!hasKey) {
-                    // @ts-ignore
-                    await window.aistudio.openSelectKey();
-                }
-            }
-
-            const image = await generateGlossaryImage();
-            setGlossaryImage(image);
-        } catch (err: any) {
-            console.error("Image generation failed:", err);
-            
-            // Check for permission errors (403)
-            const errMsg = err.message || JSON.stringify(err);
-            const isPermissionError = errMsg.includes("403") || errMsg.includes("PERMISSION_DENIED") || errMsg.includes("key");
-
-            if (isPermissionError && !isRetry) {
-                // If permission denied, prompt for key again and retry once
-                // @ts-ignore
-                if (typeof window !== 'undefined' && window.aistudio) {
-                    try {
-                        // @ts-ignore
-                        await window.aistudio.openSelectKey();
-                        await performGeneration(true);
-                        return;
-                    } catch (selectErr) {
-                        console.error("Key selection cancelled or failed", selectErr);
-                    }
-                }
-            }
-            
-            setError("Failed to generate image. Please ensure you have selected a valid API Key with access to Gemini 3 Pro.");
-        }
-    };
-
-    await performGeneration();
-    setIsGenerating(false);
-  };
+  // Static image representing the MPF Concepts Infographic
+  const glossaryImage = "https://i.imgur.com/Gz0vU6A.png";
 
   return (
     <div className="max-w-5xl mx-auto animate-fade-in space-y-8 pb-12">
@@ -67,52 +16,24 @@ const GlossaryView: React.FC = () => {
         </p>
       </div>
 
-      {/* SECTION 1: Visual Concept (AI Generated) */}
+      {/* SECTION 1: Visual Concept (Static) */}
       <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-100 pb-4 mb-6 gap-4">
+        <div className="border-b border-gray-100 pb-4 mb-6">
             <h3 className="text-lg font-bold text-blue-800 flex items-center gap-2">
                 <ImageIcon className="w-5 h-5" />
-                Section 1: Visualizing MPF Concepts (AI Generated)
+                Section 1: Visualizing MPF Concepts
             </h3>
-            <button 
-              onClick={handleGenerateImage}
-              disabled={isGenerating}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white text-sm font-bold rounded-lg shadow-md transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {isGenerating ? 'Designing...' : 'Regenerate with AI'}
-            </button>
         </div>
         
-        <div className="bg-gray-50 rounded-xl p-1 border border-gray-200 flex flex-col items-center justify-center overflow-hidden min-h-[400px] relative group">
-            {isGenerating && (
-                <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-indigo-600">
-                    <Loader2 className="w-10 h-10 animate-spin mb-3" />
-                    <p className="font-semibold animate-pulse">Creating custom infographic...</p>
-                </div>
-            )}
-            
+        <div className="bg-gray-50 rounded-xl p-1 border border-gray-200 overflow-hidden min-h-[400px]">
             <img 
               src={glossaryImage}
               alt="MPF Concepts Infographic: Annualized Return, Fund Types, Risk Indicators, Fees" 
-              className={`w-full h-auto rounded-lg shadow-sm object-contain max-h-[800px] transition-opacity duration-500 ${isGenerating ? 'opacity-50' : 'opacity-100'}`}
+              className="w-full h-auto rounded-lg shadow-sm object-contain"
               onError={(e) => {
                 e.currentTarget.src = "https://placehold.co/1200x675/eef2ff/1e3a8a?text=Infographic+Unavailable";
               }}
             />
-
-            {error && (
-                <div className="absolute inset-0 bg-black/5 flex items-center justify-center z-20">
-                    <div className="bg-white p-4 rounded-lg shadow-xl text-red-600 font-medium flex flex-col items-center max-w-sm text-center">
-                        <p className="mb-3">{error}</p>
-                        <button onClick={() => setError(null)} className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-gray-800">Dismiss</button>
-                    </div>
-                </div>
-            )}
-            
-            <div className="absolute bottom-4 right-4 bg-black/50 backdrop-blur-md text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                Generated by Gemini 3 Pro (Nano Banana Pro)
-            </div>
         </div>
       </div>
 

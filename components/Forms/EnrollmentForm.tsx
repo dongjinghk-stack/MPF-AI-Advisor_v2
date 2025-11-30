@@ -99,10 +99,10 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
     if (prefillAllocation && availableFunds.length > 0) {
       const newAllocations: Record<string, number> = {};
       prefillAllocation.allocations.forEach(alloc => {
-        // Find matching fund in available funds
         const match = availableFunds.find(f => f.constituent_fund === alloc.fund.constituent_fund);
         if (match) {
-            newAllocations[match.constituent_fund] = alloc.allocation;
+            const name = match.constituent_fund;
+            newAllocations[name] = (newAllocations[name] || 0) + alloc.allocation;
         }
       });
       
@@ -118,8 +118,9 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
     if (prefillAllocation && copyToEnrollmentTrigger && copyToEnrollmentTrigger > 0) {
          const newAllocations: Record<string, number> = {};
          prefillAllocation.allocations.forEach(alloc => {
-             // Fund should exist in availableFunds due to the initialization logic
-             newAllocations[alloc.fund.constituent_fund] = alloc.allocation;
+             const name = alloc.fund.constituent_fund;
+             // Accumulate allocations if duplicates exist in scenario
+             newAllocations[name] = (newAllocations[name] || 0) + alloc.allocation;
          });
 
          setFormData(prev => ({
@@ -260,7 +261,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                 <input 
                   type="number" 
                   min="0" max="100"
-                  className="w-12 p-1 text-right text-sm border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-12 p-1 text-right text-sm border rounded focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   placeholder="0"
                   value={formData[`${type}Allocations`][fund.constituent_fund] || ''}
                   onChange={(e) => handleAllocationChange(type, fund.constituent_fund, e.target.value)}
@@ -326,7 +327,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Surname (Eng) <span className="text-red-500">*</span></label>
                             <input 
                                 type="text" 
-                                className={`w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${errors.surnameEn ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                                className={`w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${errors.surnameEn ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-gray-300 dark:border-gray-600'} dark:bg-gray-700 dark:text-white`}
                                 value={formData.surnameEn}
                                 onChange={(e) => handleChange('surnameEn', e.target.value.toUpperCase())}
                                 placeholder="CHAN"
@@ -337,7 +338,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Given Name (Eng) <span className="text-red-500">*</span></label>
                             <input 
                                 type="text" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                 value={formData.givenNameEn}
                                 onChange={(e) => handleChange('givenNameEn', e.target.value.toUpperCase())}
                                 placeholder="TAI MAN"
@@ -361,7 +362,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">{formData.idType === 'hkid' ? 'HKID Number' : 'Passport No'} <span className="text-red-500">*</span></label>
                             <input 
                                 type="text" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                 value={formData.idType === 'hkid' ? formData.hkid : formData.passportNo}
                                 onChange={(e) => handleChange(formData.idType === 'hkid' ? 'hkid' : 'passportNo', e.target.value.toUpperCase())}
                                 placeholder={formData.idType === 'hkid' ? "A123456(7)" : ""}
@@ -373,10 +374,10 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Mobile Phone <span className="text-red-500">*</span></label>
                             <div className="flex gap-2">
-                                <input type="text" value="+852" disabled className="w-16 p-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-center" />
+                                <input type="text" value="+852" disabled className="w-16 p-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-center dark:bg-gray-600 dark:text-gray-300 dark:border-gray-500" />
                                 <input 
                                     type="text" 
-                                    className="flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                     value={formData.phone}
                                     onChange={(e) => handleChange('phone', e.target.value.replace(/\D/g,''))}
                                     placeholder="12345678"
@@ -388,7 +389,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Email <span className="text-red-500">*</span></label>
                             <input 
                                 type="email" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                 value={formData.email}
                                 onChange={(e) => handleChange('email', e.target.value)}
                                 placeholder="email@example.com"
@@ -469,7 +470,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Original Scheme Name</label>
                             <input 
                                 type="text" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                 value={formData.originalSchemeName}
                                 onChange={(e) => handleChange('originalSchemeName', e.target.value)}
                                 placeholder="e.g. Manulife Global Select"
@@ -479,7 +480,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                             <label className="block text-xs font-medium text-gray-700 mb-1">Member Account No</label>
                             <input 
                                 type="text" 
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                 value={formData.originalMemberAccNo}
                                 onChange={(e) => handleChange('originalMemberAccNo', e.target.value)}
                             />
