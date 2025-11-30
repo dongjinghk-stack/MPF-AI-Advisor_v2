@@ -7,6 +7,7 @@ import {
 import { MPFFund, Scenario } from '../../types';
 import { getFunds } from '../../services/dataService';
 import { PDFDocument } from 'pdf-lib';
+import { fetchPdfBuffer, ENROLLMENT_FORM_URL, TRANSFER_FORM_URL } from './pdfHelpers';
 
 interface EnrollmentFormProps {
   prefillAllocation?: Scenario | null;
@@ -333,19 +334,52 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
 
     const hasTransferData = Object.keys(formData.transferAllocations).length > 0 || formData.originalSchemeName;
 
-    // Check if required files are uploaded
-    if (!manualEnrollmentFile || (hasTransferData && !manualTransferFile)) {
-        setMissingTemplates(true);
-        setIsGenerating(false);
-        return;
-    }
+    // We will attempt to fetch from Google Drive URLs first.
+    // If fetch fails, we check for manual uploads.
+    // If manual uploads are missing, we trigger the popup.
+
+    let enrollmentBuffer: ArrayBuffer | null = null;
+    let transferBuffer: ArrayBuffer | null = null;
 
     try {
+        // --- 1. Enrollment Form Source ---
+        if (manualEnrollmentFile) {
+            // Priority: Manual file if user already uploaded it
+            enrollmentBuffer = await manualEnrollmentFile.arrayBuffer();
+        } else {
+            // Fallback: Try fetching from Google Drive
+            try {
+                enrollmentBuffer = await fetchPdfBuffer(ENROLLMENT_FORM_URL);
+            } catch (err) {
+                console.warn("Failed to automatically fetch enrollment form:", err);
+            }
+        }
+
+        // --- 2. Transfer Form Source (if needed) ---
+        if (hasTransferData) {
+            if (manualTransferFile) {
+                transferBuffer = await manualTransferFile.arrayBuffer();
+            } else {
+                try {
+                    transferBuffer = await fetchPdfBuffer(TRANSFER_FORM_URL);
+                } catch (err) {
+                    console.warn("Failed to automatically fetch transfer form:", err);
+                }
+            }
+        }
+
+        // --- 3. Missing Template Check ---
+        // If we still don't have buffers, we must ask the user
+        if (!enrollmentBuffer || (hasTransferData && !transferBuffer)) {
+            setMissingTemplates(true);
+            setIsGenerating(false);
+            return;
+        }
+
         // Use string literal 'Helvetica' to avoid import issues with StandardFonts enum
         const fontName = 'Helvetica';
 
-        // --- 1. Enrollment Form ---
-        const enrollmentBuffer = await manualEnrollmentFile.arrayBuffer();
+        // --- 4. Process Enrollment Form ---
         const pdfDoc = await PDFDocument.load(enrollmentBuffer, { ignoreEncryption: true });
         const helveticaFont = await pdfDoc.embedFont(fontName);
         
@@ -451,9 +485,8 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
             url: URL.createObjectURL(blob)
         });
 
-        // --- 2. Transfer Form ---
-        if (hasTransferData && manualTransferFile) {
-            const transferBuffer = await manualTransferFile.arrayBuffer();
+        // --- 5. Process Transfer Form ---
+        if (hasTransferData && transferBuffer) {
             const pdfDocTransfer = await PDFDocument.load(transferBuffer, { ignoreEncryption: true });
             const helveticaFontTransfer = await pdfDocTransfer.embedFont(fontName);
             
@@ -914,7 +947,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                 </div>
                 
                 <p className="text-sm text-gray-600 mb-6">
-                    Please upload the required PDF template files to proceed with form generation.
+                    Automatic download failed. Please upload the required PDF template files to proceed.
                 </p>
 
                 <div className="space-y-4 mb-6">

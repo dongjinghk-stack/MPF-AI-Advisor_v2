@@ -1,6 +1,6 @@
 
-export const ENROLLMENT_FORM_URL = "https://api.empf.org.hk/cas/dotcms/api/v1/public/assetsv2/pdf/dA/a7c9a59650288d8d17268512b48a9f5a/MASS-PAA-25V1.pdf";
-export const TRANSFER_FORM_URL = "https://api.empf.org.hk/cas/dotcms/api/v1/public/assetsv2/pdf/dA/8a49f1132099038bf0897e69bcb10166/PM-25V5.pdf";
+export const ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1NVGDLBM3sxaugqB9rFzvl6sbiuKrMwBa";
+export const TRANSFER_FORM_URL = "https://drive.google.com/uc?export=download&id=1zZWNz1JWvW1hmToOktU71zCn6P8CpH98";
 
 export const fetchPdfBuffer = async (url: string): Promise<ArrayBuffer> => {
   // Array of proxy URL generators to try in sequence
