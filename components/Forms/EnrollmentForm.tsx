@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   ChevronDown, ChevronUp, AlertCircle, CheckCircle, Download, 
-  Info, FileText, User, Briefcase, RefreshCw 
+  Info, FileText, User, Briefcase, RefreshCw, Loader2 
 } from 'lucide-react';
 import { MPFFund, Scenario } from '../../types';
 import { getFunds } from '../../services/dataService';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 interface EnrollmentFormProps {
   prefillAllocation?: Scenario | null;
@@ -66,12 +68,35 @@ const initialFormData: FormData = {
   transferAllocations: {}
 };
 
+// Coordinate mappings for Investment Mandate (Page 6 of Enrollment Form)
+// Key: Fund Name (partial match), Value: Y coordinate (from bottom of page)
+const ENROLLMENT_FUND_COORDS: Record<string, number> = {
+  'Global Stable Fund': 562,
+  'Global Growth Fund': 545,
+  'Guaranteed Fund': 528,
+  'MPF Conservative Fund': 511,
+  'Global Equity Fund': 494,
+  'Global Bond Fund': 477,
+  'Asian Bond Fund': 460,
+  'Asian Pacific Equity Fund': 443,
+  'US Equity Fund': 426,
+  'European Equity Fund': 409,
+  'Hong Kong Equities Fund': 392,
+  'Greater China Equity Fund': 375,
+  'Core Accumulation Fund': 358,
+  'Age 65 Plus Fund': 341
+};
+
 const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copyToEnrollmentTrigger }) => {
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [expandedSection, setExpandedSection] = useState<string>('aboutYou');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [availableFunds, setAvailableFunds] = useState<MPFFund[]>([]);
-  const [generatedJson, setGeneratedJson] = useState<string | null>(null);
+  
+  // New state for PDF generation
+  const [generatedFiles, setGeneratedFiles] = useState<{name: string, url: string}[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  
   const [activeModal, setActiveModal] = useState<string | null>(null);
 
   // Initialize Available Funds, ensuring Scenario funds are present
@@ -195,7 +220,7 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
     if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Valid email required';
 
     // Enrollment Validation
-    if (formData.memberType) {
+    if (formData.memberType && expandedSection === 'enrollment') {
         if (!formData.acceptPIA) newErrors.acceptPIA = 'Required';
         if (!formData.acceptPersonalInfo) newErrors.acceptPersonalInfo = 'Required';
     }
@@ -204,45 +229,245 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
     return Object.keys(newErrors).length === 0;
   };
 
-  const generateData = () => {
+  const generatePDFs = async () => {
     if (!validateForm()) {
-      alert("Please fix validation errors.");
+      alert("Please fix validation errors in the Personal Info section.");
       return;
     }
+    
+    setIsGenerating(true);
+    setGeneratedFiles([]);
+    const newGeneratedFiles = [];
 
-    const data = {
-      scheme: "MASS Mandatory Provident Fund Scheme",
-      timestamp: new Date().toISOString(),
-      personalInfo: {
-        name: `${formData.surnameEn}, ${formData.givenNameEn}`,
-        chineseName: formData.chineseName,
-        id: formData.idType === 'hkid' ? formData.hkid : formData.passportNo,
-        contact: { phone: formData.phone, email: formData.email },
-        address: { region: formData.region, district: formData.district, street: formData.street }
-      },
-      allocations: {
-        enrollment: formData.enrollmentAllocations,
-        transfer: formData.transferAllocations
-      },
-      declarations: {
-        pia: formData.acceptPIA,
-        pics: formData.acceptPersonalInfo
-      }
-    };
+    // 1. Generate Enrollment Form (Template 1_MASS-PAA-25V1.pdf)
+    try {
+        const enrollmentTemplateUrl = '1_MASS-PAA-25V1.pdf';
+        let pdfDoc;
+        let helveticaFont;
 
-    setGeneratedJson(JSON.stringify(data, null, 2));
-  };
+        try {
+            const existingPdfBytes = await fetch(enrollmentTemplateUrl).then(res => {
+                if (!res.ok) throw new Error("Template not found");
+                return res.arrayBuffer();
+            });
+            pdfDoc = await PDFDocument.load(existingPdfBytes);
+        } catch (e) {
+            console.warn("Enrollment template not found, falling back to blank PDF.");
+            pdfDoc = await PDFDocument.create();
+            // Add dummy pages to match template structure (need at least 6 pages based on existing code)
+            for(let i=0; i<6; i++) pdfDoc.addPage([595, 842]);
+            
+            const page1 = pdfDoc.getPages()[0];
+            const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+            page1.drawText("Enrollment Form Template Missing", { x: 50, y: 800, size: 20, font });
+            page1.drawText("This is a generated placeholder containing your data.", { x: 50, y: 770, size: 12, font });
+        }
+        
+        helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        const pages = pdfDoc.getPages();
 
-  const downloadData = () => {
-    if (!generatedJson) return;
-    const blob = new Blob([generatedJson], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `MPF_Form_${formData.surnameEn}_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+        // --- Page 2: Member Particulars ---
+        if (pages.length > 1) {
+            const page2 = pages[1];
+            
+            // Surname (Eng)
+            page2.drawText(formData.surnameEn, { x: 130, y: 118, size: 10, font: helveticaFont });
+            // Given Name (Eng)
+            page2.drawText(formData.givenNameEn, { x: 350, y: 118, size: 10, font: helveticaFont });
+        }
+
+        // --- Page 3: Personal Details & Address ---
+        if (pages.length > 2) {
+            const page3 = pages[2];
+            // Date of Birth (DD MM YYYY)
+            if (formData.dobDay) page3.drawText(formData.dobDay, { x: 285, y: 752, size: 10, font: helveticaFont });
+            if (formData.dobMonth) page3.drawText(formData.dobMonth, { x: 320, y: 752, size: 10, font: helveticaFont });
+            if (formData.dobYear) page3.drawText(formData.dobYear, { x: 355, y: 752, size: 10, font: helveticaFont });
+
+            // Gender
+            if (formData.gender === 'male') page3.drawText('X', { x: 780, y: 752, size: 12, font: helveticaFont });
+            if (formData.gender === 'female') page3.drawText('X', { x: 830, y: 752, size: 12, font: helveticaFont });
+
+            // ID Number
+            const idVal = formData.idType === 'hkid' ? formData.hkid : formData.passportNo;
+            if (formData.idType === 'hkid') page3.drawText('X', { x: 78, y: 725, size: 12, font: helveticaFont });
+            else page3.drawText('X', { x: 265, y: 725, size: 12, font: helveticaFont }); // Passport
+            
+            // ID Digits (Simulated spread in boxes)
+            let idX = 180;
+            for (const char of idVal) {
+                page3.drawText(char, { x: idX, y: 695, size: 11, font: helveticaFont });
+                idX += 14.5; // approximate spacing for boxes
+            }
+
+            // Phone
+            let phoneX = 350;
+             for (const char of formData.phone) {
+                page3.drawText(char, { x: phoneX, y: 645, size: 11, font: helveticaFont });
+                phoneX += 14.5;
+            }
+
+            // Email
+            page3.drawText(formData.email, { x: 80, y: 590, size: 10, font: helveticaFont });
+
+            // Address
+            const addrY = 535;
+            page3.drawText(formData.flatRoom, { x: 80, y: addrY, size: 10, font: helveticaFont });
+            page3.drawText(formData.floor, { x: 300, y: addrY, size: 10, font: helveticaFont });
+            page3.drawText(formData.block, { x: 400, y: addrY, size: 10, font: helveticaFont });
+            page3.drawText(formData.building, { x: 80, y: addrY - 35, size: 10, font: helveticaFont });
+            page3.drawText(formData.street, { x: 80, y: addrY - 70, size: 10, font: helveticaFont });
+            
+            // District/Region checkboxes
+            if (formData.region === 'hk') page3.drawText('X', { x: 303, y: 430, size: 12, font: helveticaFont });
+            if (formData.region === 'kln') page3.drawText('X', { x: 465, y: 430, size: 12, font: helveticaFont });
+            if (formData.region === 'nt') page3.drawText('X', { x: 628, y: 430, size: 12, font: helveticaFont });
+        }
+
+        // --- Page 6: Investment Mandate ---
+        if (pages.length > 5) {
+            const page6 = pages[5];
+            // Fill allocation percentages
+            Object.entries(formData.enrollmentAllocations).forEach(([fundName, value]) => {
+                const allocation = value as number;
+                if (allocation > 0) {
+                    // Find mapped Y coordinate
+                    let matchedY = 0;
+                    for (const key in ENROLLMENT_FUND_COORDS) {
+                        if (fundName.includes(key)) {
+                            matchedY = ENROLLMENT_FUND_COORDS[key];
+                            break;
+                        }
+                    }
+                    
+                    if (matchedY > 0) {
+                        // Mandatory Contribution Column X ≈ 380
+                        page6.drawText(allocation.toString(), { x: 380, y: matchedY, size: 10, font: helveticaFont });
+                    }
+                }
+            });
+            
+            // Total (Mandatory) - approx Y=300
+            page6.drawText('100', { x: 380, y: 300, size: 10, font: helveticaFont });
+        }
+
+        const pdfBytes = await pdfDoc.save();
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        newGeneratedFiles.push({
+            name: 'MPF_Enrollment_Form_Sample.pdf',
+            url: URL.createObjectURL(blob)
+        });
+
+    } catch (error) {
+        console.error("Error generating Enrollment PDF", error);
+        // No alert here, allow process to continue for other forms or show partial success
+    }
+
+    // 2. Generate Transfer Form (Template 2_PM-25V5.pdf)
+    const hasTransferData = Object.keys(formData.transferAllocations).length > 0 || formData.originalSchemeName;
+    
+    if (hasTransferData) {
+         try {
+            const transferTemplateUrl = '2_PM-25V5.pdf';
+            let pdfDoc;
+            let helveticaFont;
+
+            try {
+                const existingPdfBytes = await fetch(transferTemplateUrl).then(res => {
+                    if (!res.ok) throw new Error("Template not found");
+                    return res.arrayBuffer();
+                });
+                pdfDoc = await PDFDocument.load(existingPdfBytes);
+            } catch (e) {
+                console.warn("Transfer template not found, falling back to blank PDF.");
+                pdfDoc = await PDFDocument.create();
+                // Add dummy pages (need at least 3 pages based on existing code)
+                for(let i=0; i<3; i++) pdfDoc.addPage([595, 842]);
+
+                const page1 = pdfDoc.getPages()[0];
+                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                page1.drawText("Transfer Form Template Missing", { x: 50, y: 800, size: 20, font });
+                page1.drawText("This is a generated placeholder containing your data.", { x: 50, y: 770, size: 12, font });
+            }
+
+            helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+            const pages = pdfDoc.getPages();
+
+            // --- Page 1: Scheme Member's Details ---
+            if (pages.length > 0) {
+                const page1 = pages[0];
+                // Surname (Eng)
+                page1.drawText(formData.surnameEn, { x: 120, y: 285, size: 10, font: helveticaFont });
+                // Given Name (Eng)
+                page1.drawText(formData.givenNameEn, { x: 320, y: 285, size: 10, font: helveticaFont });
+                // ID Checkbox
+                if (formData.idType === 'hkid') page1.drawText('X', { x: 76, y: 205, size: 12, font: helveticaFont });
+                else page1.drawText('X', { x: 260, y: 205, size: 12, font: helveticaFont });
+                
+                // ID Number
+                const idVal = formData.idType === 'hkid' ? formData.hkid : formData.passportNo;
+                page1.drawText(idVal, { x: 260, y: 175, size: 11, font: helveticaFont });
+            }
+
+            // --- Page 2: Transfer Information ---
+            if (pages.length > 1) {
+                const page2 = pages[1];
+                // Phone (Section 3)
+                let phoneX = 360;
+                for (const char of formData.phone) {
+                    page2.drawText(char, { x: phoneX, y: 750, size: 11, font: helveticaFont });
+                    phoneX += 14.5;
+                }
+                
+                // Address (Section 4)
+                const addrY = 640;
+                page2.drawText(formData.flatRoom, { x: 150, y: addrY, size: 10, font: helveticaFont });
+                page2.drawText(formData.floor, { x: 330, y: addrY, size: 10, font: helveticaFont });
+                page2.drawText(formData.block, { x: 450, y: addrY, size: 10, font: helveticaFont });
+                page2.drawText(formData.building, { x: 150, y: addrY - 35, size: 10, font: helveticaFont });
+                page2.drawText(formData.street, { x: 150, y: addrY - 70, size: 10, font: helveticaFont });
+                page2.drawText(formData.district, { x: 150, y: addrY - 105, size: 10, font: helveticaFont });
+
+                // Original Trustee & Scheme (Section B.1)
+                // Original Scheme Name
+                page2.drawText(formData.originalSchemeName, { x: 220, y: 440, size: 10, font: helveticaFont });
+                
+                // Account Type (Personal Account usually)
+                page2.drawText('X', { x: 80, y: 410, size: 12, font: helveticaFont });
+                
+                // Member Account No
+                let accX = 220;
+                for (const char of formData.originalMemberAccNo) {
+                    page2.drawText(char, { x: accX, y: 385, size: 11, font: helveticaFont });
+                    accX += 14.5;
+                }
+            }
+            
+            // --- Page 3: Transfer Options ---
+            if (pages.length > 2) {
+                const page3 = pages[2];
+                // Option (ii) To my designated account in the new scheme (Section C.1)
+                page3.drawText('X', { x: 80, y: 555, size: 12, font: helveticaFont }); 
+                
+                // New Trustee Name
+                page3.drawText("YF Life Trustees Limited", { x: 220, y: 530, size: 10, font: helveticaFont });
+                // New Scheme Name
+                page3.drawText("MASS Mandatory Provident Fund Scheme", { x: 220, y: 500, size: 10, font: helveticaFont });
+            }
+            
+            const pdfBytes = await pdfDoc.save();
+            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            newGeneratedFiles.push({
+                name: 'MPF_Transfer_Form_Sample.pdf',
+                url: URL.createObjectURL(blob)
+            });
+        } catch (error) {
+            console.error("Error generating Transfer PDF", error);
+        }
+    }
+
+    setGeneratedFiles(newGeneratedFiles);
+    setIsGenerating(false);
   };
 
   // --- Render Helpers ---
@@ -370,7 +595,29 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                         <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Date of Birth</label>
+                            <div className="flex gap-2">
+                                <input type="text" placeholder="DD" className="w-16 p-2 text-sm border rounded-lg" value={formData.dobDay} onChange={e => handleChange('dobDay', e.target.value)} maxLength={2}/>
+                                <input type="text" placeholder="MM" className="w-16 p-2 text-sm border rounded-lg" value={formData.dobMonth} onChange={e => handleChange('dobMonth', e.target.value)} maxLength={2}/>
+                                <input type="text" placeholder="YYYY" className="w-24 p-2 text-sm border rounded-lg" value={formData.dobYear} onChange={e => handleChange('dobYear', e.target.value)} maxLength={4}/>
+                            </div>
+                         </div>
+                         <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Gender</label>
+                             <div className="flex gap-4 mt-2">
+                                <label className="flex items-center text-sm gap-2">
+                                    <input type="radio" checked={formData.gender === 'male'} onChange={() => handleChange('gender', 'male')} /> Male
+                                </label>
+                                <label className="flex items-center text-sm gap-2">
+                                    <input type="radio" checked={formData.gender === 'female'} onChange={() => handleChange('gender', 'female')} /> Female
+                                </label>
+                            </div>
+                         </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Mobile Phone <span className="text-red-500">*</span></label>
                             <div className="flex gap-2">
@@ -395,6 +642,29 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                                 placeholder="email@example.com"
                             />
                         </div>
+                    </div>
+                    
+                    {/* Address Fields */}
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                         <label className="block text-xs font-bold text-gray-800 mb-3">Residential Address</label>
+                         <div className="grid grid-cols-3 gap-2 mb-2">
+                             <input type="text" placeholder="Flat/Room" className="p-2 text-sm border rounded-lg" value={formData.flatRoom} onChange={e => handleChange('flatRoom', e.target.value)}/>
+                             <input type="text" placeholder="Floor" className="p-2 text-sm border rounded-lg" value={formData.floor} onChange={e => handleChange('floor', e.target.value)}/>
+                             <input type="text" placeholder="Block" className="p-2 text-sm border rounded-lg" value={formData.block} onChange={e => handleChange('block', e.target.value)}/>
+                         </div>
+                         <div className="grid grid-cols-1 gap-2 mb-2">
+                             <input type="text" placeholder="Building / Estate" className="w-full p-2 text-sm border rounded-lg" value={formData.building} onChange={e => handleChange('building', e.target.value)}/>
+                             <input type="text" placeholder="Street No. & Name" className="w-full p-2 text-sm border rounded-lg" value={formData.street} onChange={e => handleChange('street', e.target.value)}/>
+                         </div>
+                         <div className="grid grid-cols-2 gap-2">
+                              <input type="text" placeholder="District" className="p-2 text-sm border rounded-lg" value={formData.district} onChange={e => handleChange('district', e.target.value)}/>
+                              <select className="p-2 text-sm border rounded-lg" value={formData.region} onChange={e => handleChange('region', e.target.value)}>
+                                  <option value="">Select Region</option>
+                                  <option value="hk">Hong Kong</option>
+                                  <option value="kln">Kowloon</option>
+                                  <option value="nt">New Territories</option>
+                              </select>
+                         </div>
                     </div>
                 </div>
             )}
@@ -504,14 +774,15 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
         {/* Submit Actions */}
         <div className="mt-6 flex flex-col items-center gap-4">
             <button 
-                onClick={generateData}
-                className="w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-200 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+                onClick={generatePDFs}
+                disabled={isGenerating}
+                className="w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl shadow-lg shadow-blue-200 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
             >
-                <FileText size={18} />
+                {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
                 Generate Form Data
             </button>
 
-            {generatedJson && (
+            {generatedFiles.length > 0 && (
                 <div className="w-full bg-green-50 border border-green-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 animate-scale-in">
                     <div className="flex items-center gap-3">
                         <div className="bg-green-100 p-2 rounded-full text-green-600">
@@ -519,16 +790,22 @@ const EnrollmentForm: React.FC<EnrollmentFormProps> = ({ prefillAllocation, copy
                         </div>
                         <div>
                             <h4 className="text-sm font-bold text-green-800">Ready for Download</h4>
-                            <p className="text-xs text-green-600">Data generated successfully. Click to download JSON.</p>
+                            <p className="text-xs text-green-600">PDF documents generated successfully. Click to download.</p>
                         </div>
                     </div>
-                    <button 
-                        onClick={downloadData}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg shadow-sm flex items-center gap-2 transition-colors"
-                    >
-                        <Download size={16} />
-                        Download JSON
-                    </button>
+                    <div className="flex gap-2">
+                        {generatedFiles.map((file, idx) => (
+                            <a 
+                                key={idx}
+                                href={file.url}
+                                download={file.name}
+                                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg shadow-sm flex items-center gap-2 transition-colors"
+                            >
+                                <Download size={16} />
+                                {file.name.includes('Enrollment') ? 'Enrollment PDF' : 'Transfer PDF'}
+                            </a>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>
