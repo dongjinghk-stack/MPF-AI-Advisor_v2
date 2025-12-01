@@ -1,10 +1,7 @@
 import React from 'react';
-import { Image as ImageIcon, Building2, Briefcase, HardHat, ArrowRight, Plus, Equal } from 'lucide-react';
+import { Building2, Briefcase, HardHat, ArrowRight, Plus, Equal } from 'lucide-react';
 
 const GlossaryView: React.FC = () => {
-  // Static image representing the MPF Concepts Infographic
-  const glossaryImage = "https://i.imgur.com/Gz0vU6A.png";
-
   return (
     <div className="max-w-5xl mx-auto animate-fade-in space-y-8 pb-12">
       
@@ -16,33 +13,12 @@ const GlossaryView: React.FC = () => {
         </p>
       </div>
 
-      {/* SECTION 1: Visual Concept (Static) */}
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-        <div className="border-b border-gray-100 pb-4 mb-6">
-            <h3 className="text-lg font-bold text-blue-800 flex items-center gap-2">
-                <ImageIcon className="w-5 h-5" />
-                Section 1: Visualizing MPF Concepts
-            </h3>
-        </div>
-        
-        <div className="bg-gray-50 rounded-xl p-1 border border-gray-200 overflow-hidden min-h-[400px]">
-            <img 
-              src={glossaryImage}
-              alt="MPF Concepts Infographic: Annualized Return, Fund Types, Risk Indicators, Fees" 
-              className="w-full h-auto rounded-lg shadow-sm object-contain"
-              onError={(e) => {
-                e.currentTarget.src = "https://placehold.co/1200x675/eef2ff/1e3a8a?text=Infographic+Unavailable";
-              }}
-            />
-        </div>
-      </div>
-
       {/* SECTION 2: Interactive Diagrams */}
       <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
         <div className="flex justify-between items-center border-b border-gray-100 pb-4 mb-6">
             <h3 className="text-lg font-bold text-blue-800 flex items-center gap-2">
                 <Building2 className="w-5 h-5" />
-                Section 2: Key Concepts & Diagrams
+                Key Concepts & Diagrams
             </h3>
         </div>
 
