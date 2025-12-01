@@ -1,14 +1,15 @@
 
 import React, { useState } from 'react';
-import { BarChart3, PieChart, ShieldCheck, ArrowRightLeft, BookOpen } from 'lucide-react';
+import { BarChart3, PieChart, ShieldCheck, ArrowRightLeft, BookOpen, Lightbulb } from 'lucide-react';
 import RankingsView from './components/Views/RankingsView';
 import AnalyzerView from './components/Views/AnalyzerView';
 import FundTransferView from './components/Views/FundTransferView';
 import GlossaryView from './components/Views/GlossaryView';
+import MPFExplainedView from './components/Views/MPFExplainedView';
 import { Scenario } from './types';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'rankings' | 'analyzer' | 'transfer' | 'glossary'>('rankings');
+  const [activeTab, setActiveTab] = useState<'explained' | 'rankings' | 'analyzer' | 'transfer' | 'glossary'>('explained');
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
 
   const handleScenarioSelect = (scenario: Scenario) => {
@@ -46,6 +47,16 @@ function App() {
       <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-8 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('explained')}
+              className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm transition-all duration-200 whitespace-nowrap
+                ${activeTab === 'explained' 
+                  ? 'border-blue-600 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+            >
+              <Lightbulb className="w-5 h-5" />
+              <span>MPF Explained</span>
+            </button>
             <button
               onClick={() => setActiveTab('rankings')}
               className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm transition-all duration-200 whitespace-nowrap
@@ -93,7 +104,10 @@ function App() {
       {/* Main Content */}
       <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         <div className="transition-opacity duration-300 ease-in-out">
-          {/* We use display: none for AnalyzerView to preserve its state (chat history, uploaded files) when switching tabs */}
+          {/* We use display: none for tabs to preserve their state when switching */}
+          <div style={{ display: activeTab === 'explained' ? 'block' : 'none' }}>
+            <MPFExplainedView />
+          </div>
           <div style={{ display: activeTab === 'rankings' ? 'block' : 'none' }}>
             <RankingsView isActive={activeTab === 'rankings'} />
           </div>
