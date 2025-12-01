@@ -106,7 +106,34 @@ const RankingsView: React.FC<RankingsViewProps> = ({ isActive }) => {
                 <CartesianGrid />
                 <XAxis type="number" dataKey="latest_fer" name="FER" unit="%" label={{ value: 'Fund Expense Ratio', position: 'insideBottom', offset: -10 }} />
                 <YAxis type="number" dataKey="annualized_return_1y" name="1Y Return" unit="%" label={{ value: '1Y Return', angle: -90, position: 'insideLeft' }} />
-                <RechartsTooltip cursor={{ strokeDasharray: '3 3' }} />
+                <ZAxis type="number" dataKey="fund_size_hkd_m" range={[20, 400]} name="Fund Size" />
+                <RechartsTooltip cursor={{ strokeDasharray: '3 3' }} content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                            <div className="bg-white p-3 border border-gray-200 shadow-xl rounded-lg text-xs z-50">
+                                <p className="font-bold text-gray-900 mb-2 border-b border-gray-100 pb-1 max-w-[200px]">{data.constituent_fund}</p>
+                                <div className="space-y-1">
+                                     <div className="flex justify-between gap-4">
+                                        <span className="text-gray-500">FER:</span>
+                                        <span className="font-mono font-semibold text-gray-700">{data.latest_fer.toFixed(2)}%</span>
+                                     </div>
+                                     <div className="flex justify-between gap-4">
+                                        <span className="text-gray-500">1Y Return:</span>
+                                        <span className={`font-mono font-bold ${data.annualized_return_1y >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {data.annualized_return_1y > 0 ? '+' : ''}{data.annualized_return_1y.toFixed(2)}%
+                                        </span>
+                                     </div>
+                                     <div className="flex justify-between gap-4">
+                                        <span className="text-gray-500">Size:</span>
+                                        <span className="font-mono text-gray-700">{(data.fund_size_hkd_m / 1000).toFixed(2)}B</span>
+                                     </div>
+                                </div>
+                            </div>
+                        );
+                    }
+                    return null;
+                }} />
                 <Scatter name="Funds" data={allFunds} fill="#2563EB" opacity={0.6} />
               </ScatterChart>
             </ResponsiveContainer>
